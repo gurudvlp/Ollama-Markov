@@ -40,7 +40,45 @@ class Generator:
         Returns:
             Generated text
         """
-        pass  # TODO: Implement
+        # Extract options
+        temperature = options.get('temperature', self.config['temperature']) if options else self.config['temperature']
+        max_tokens = options.get('num_predict', self.config['max_tokens']) if options else self.config['max_tokens']
+        top_k = options.get('top_k', None) if options else None
+
+        # Preprocess and train
+        tokens = self.text_processor.preprocess(prompt)
+
+        if tokens:
+            # Store message
+            self.db.add_message("api", "generate", prompt)
+
+            # Train model
+            self.model.train(tokens)
+
+            # Store transitions in batch
+            transitions = []
+            for state, next_tokens in self.model.transitions.items():
+                for next_token, count in next_tokens.items():
+                    transitions.append((self.model.order, state, next_token, count))
+
+            if transitions:
+                self.db.add_transitions_batch(transitions)
+
+        # Check if should generate
+        if not self._should_generate(self.config['mode']):
+            return "Trained"
+
+        # Generate response
+        seed_state = self._select_seed_state(prompt)
+        generated = self.model.generate(seed_state, max_tokens, temperature, top_k)
+
+        if not generated:
+            return "I don't have enough training data yet."
+
+        # Apply safety
+        safe_text = self._apply_safety(generated)
+
+        return safe_text
 
     def generate_from_messages(
         self, messages: List[Dict], options: Optional[Dict] = None
@@ -58,7 +96,49 @@ class Generator:
         Returns:
             Generated response text
         """
-        pass  # TODO: Implement
+        # Extract user messages
+        user_messages = [msg['content'] for msg in messages if msg.get('role') == 'user']
+
+        if not user_messages:
+            return "I don't have enough training data yet."
+
+        # Train on each user message
+        for msg_content in user_messages:
+            tokens = self.text_processor.preprocess(msg_content)
+
+            if tokens:
+                self.db.add_message("api", "chat", msg_content)
+                self.model.train(tokens)
+
+                # Store transitions
+                transitions = []
+                for state, next_tokens in self.model.transitions.items():
+                    for next_token, count in next_tokens.items():
+                        transitions.append((self.model.order, state, next_token, count))
+
+                if transitions:
+                    self.db.add_transitions_batch(transitions)
+
+        # Check if should generate
+        if not self._should_generate(self.config['mode']):
+            return "Trained"
+
+        # Use last user message as context
+        context = user_messages[-1]
+
+        # Extract options and generate
+        temperature = options.get('temperature', self.config['temperature']) if options else self.config['temperature']
+        max_tokens = options.get('num_predict', self.config['max_tokens']) if options else self.config['max_tokens']
+        top_k = options.get('top_k', None) if options else None
+
+        seed_state = self._select_seed_state(context)
+        generated = self.model.generate(seed_state, max_tokens, temperature, top_k)
+
+        if not generated:
+            return "I don't have enough training data yet."
+
+        safe_text = self._apply_safety(generated)
+        return safe_text
 
     def _select_seed_state(self, context: str) -> str:
         """
@@ -72,7 +152,26 @@ class Generator:
         Returns:
             Seed state string
         """
-        pass  # TODO: Implement
+        tokens = self.text_processor.tokenize(context)
+
+        if not tokens:
+            return ' '.join(['<START>'] * (self.model.order - 1))
+
+        # Take last N tokens where N = order - 1
+        seed_tokens = tokens[-(self.model.order - 1):] if len(tokens) >= self.model.order - 1 else tokens
+
+        # Pad with <START> if needed
+        while len(seed_tokens) < self.model.order - 1:
+            seed_tokens.insert(0, '<START>')
+
+        seed_state = ' '.join(seed_tokens)
+
+        # Check if state exists in model
+        if seed_state in self.model.transitions:
+            return seed_state
+
+        # Fall back to <START>
+        return ' '.join(['<START>'] * (self.model.order - 1))
 
     def _apply_safety(self, text: str) -> str:
         """
@@ -84,7 +183,12 @@ class Generator:
         Returns:
             Sanitized text
         """
-        pass  # TODO: Implement
+        is_safe, violations = self.safety_filter.check(text)
+
+        if not is_safe:
+            text = self.safety_filter.apply_fixes(text)
+
+        return text
 
     def _should_generate(self, mode: str) -> bool:
         """
