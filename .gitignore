@@ -6,6 +6,9 @@ __pycache__/
 # C extensions
 *.so
 
+.claude/
+examples/
+
 # Distribution / packaging
 .Python
 build/
@@ -205,3 +208,55 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific
+# SQLite database files
+*.db
+*.sqlite
+*.sqlite-journal
+
+# Configuration files with secrets
+config.local.json
+.config.local
+
+# Data and cache directories
+data/
+cache/
+tmp/
+
+# Discord bot token and credentials (if stored locally during dev)
+.discord_token
+.bot_token
+
+# Reddit scraper runtime files and data
+# Database files: ollama_markov.db, reddit_scraper.db, etc.
+reddit_scraper.db
+reddit_scraper.db-journal
+reddit_scraper.db-shm
+reddit_scraper.db-wal
+
+# Reddit data exports and artifacts
+reddit_data/
+reddit_output/
+reddit_posts_*.json
+reddit_comments_*.json
+reddit_threads_*.csv
+subreddit_data_*.json
+
+# Reddit API credentials and tokens (in case stored in files)
+reddit_credentials.json
+reddit_token.txt
+reddit_praw.ini
+
+# Reddit scraper cache and temporary files
+.reddit_cache/
+reddit_cache/
+.praw_cache/
+
+# Reddit scraper tools and guides (development/runtime code)
+reddit_tools/
+REDDIT_SCRAPER_GUIDE.md
+
+# Training data files
+sysadmin_training_data.json
+examples_training_data.txt

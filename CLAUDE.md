@@ -1,0 +1,3 @@
+- Always refer to the `design-spec.md` file for previous decisions and specifications.
+- Always update the `design-spec.md` file with any new decisions, and the current state of the program implementation.
+- Always keep the `README.md` file up to date, with an explicit getting started guide.
