@@ -26,6 +26,7 @@ def load_config() -> Dict[str, Any]:
         "compaction_interval": int(os.getenv("COMPACTION_INTERVAL", "1000")),
         "recommended_tokens": int(os.getenv("RECOMMENDED_TOKENS", "50")),
         "max_tokens": int(os.getenv("MAX_TOKENS", "500")),
+        "complete_sentences": os.getenv("COMPLETE_SENTENCES", "true").lower() == "true",
         "temperature": float(os.getenv("TEMPERATURE", "0.8")),
         "min_message_length": int(os.getenv("MIN_MESSAGE_LENGTH", "3")),
         "log_level": os.getenv("LOG_LEVEL", "INFO"),

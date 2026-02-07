@@ -279,8 +279,14 @@ This database is **not part of the core project** and is only used for deduplica
      - Boost increases exponentially beyond recommended length
      - Still respects `max_tokens` as hard upper limit
      - Only applied if `<END>` token is available in current state's distribution
+   - **Sentence completion**: When `complete_sentences` is enabled (default)
+     - Continues generating past `recommended_tokens` until sentence-ending punctuation (. ! ?)
+     - Adds 20% buffer beyond recommended length for sentence completion
+     - If buffer exceeded, truncates back to last sentence-ending punctuation
+     - Prevents mid-sentence cutoffs for more natural output
 4. **Stopping Conditions**
    - `<END>` token (biased by length recommendations)
+   - Sentence-ending punctuation (when `complete_sentences` enabled and past recommended length)
    - max tokens / characters
    - repetition detection
    - timeout
@@ -365,6 +371,7 @@ Both endpoints accept Ollama-standard options (via an `options` object in the re
 - `top_k`: Restrict to top K most likely tokens
 - `num_predict`: Max tokens to generate — overrides MAX_TOKENS
 - `recommended_tokens`: Target output length in tokens — overrides RECOMMENDED_TOKENS
+- `complete_sentences`: Finish sentences before stopping (true/false) — overrides COMPLETE_SENTENCES
 - `stop`: Stop sequences (future enhancement)
 
 ### Streaming
@@ -450,6 +457,7 @@ For compatibility with web interfaces and OpenAI-compatible clients, the server 
   - `COMPACTION_INTERVAL`: how often to merge transitions (time-based or write-based)
   - `RECOMMENDED_TOKENS`: Target output length in tokens (default 50, ~2-3 sentences)
   - `MAX_TOKENS`: Maximum output length in tokens (default 500, hard limit)
+  - `COMPLETE_SENTENCES`: Finish sentences before stopping (default true)
   - `TEMPERATURE`: Sampling temperature (default 0.8, 0=deterministic, >1=random)
   - `SSL_ENABLED`: Enable HTTPS (default false)
   - `SSL_CERT`: Path to SSL certificate file
@@ -571,7 +579,10 @@ The server supports HTTPS for secure client connections:
 
 **Added output length control:**
 - New `RECOMMENDED_TOKENS` config setting (default: 50 tokens ≈ 2-3 sentences)
+- New `COMPLETE_SENTENCES` config setting (default: true) for natural sentence completion
 - Enhanced generation pipeline with sigmoid-based length biasing
 - Automatic probability boost for `<END>` token as output approaches recommended length
-- Per-request `recommended_tokens` option for dynamic control
+- Sentence completion logic prevents mid-sentence cutoffs
+- Fixed punctuation spacing using tokenizer's detokenize method
+- Per-request override options for all generation parameters
 - Updated documentation in README and design spec

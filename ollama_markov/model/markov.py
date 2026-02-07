@@ -14,14 +14,16 @@ import math
 class MarkovModel:
     """Word-level Markov chain model for text generation."""
 
-    def __init__(self, order: int = 2):
+    def __init__(self, order: int = 2, tokenizer=None):
         """
         Initialize Markov model with n-gram order.
 
         Args:
             order: N-gram order (typically 2-3)
+            tokenizer: Optional tokenizer instance for proper detokenization
         """
         self.order = order
+        self.tokenizer = tokenizer
         self.transitions = defaultdict(lambda: defaultdict(int))
 
     def train(self, tokens: List[str]) -> None:
@@ -55,6 +57,7 @@ class MarkovModel:
         temperature: float = 1.0,
         top_k: Optional[int] = None,
         recommended_tokens: Optional[int] = None,
+        complete_sentences: bool = True,
     ) -> str:
         """
         Generate text starting from seed_state.
@@ -65,6 +68,7 @@ class MarkovModel:
             temperature: Sampling temperature (0=deterministic, 1=default, >1=random)
             top_k: Restrict sampling to top K tokens (None=all)
             recommended_tokens: Target token count - increases END probability as this is approached
+            complete_sentences: If True, continue past recommended_tokens to complete sentence
 
         Returns:
             Generated text as string
@@ -74,6 +78,11 @@ class MarkovModel:
 
         generated_tokens = []
         current_state = seed_state
+        hit_recommended = False
+        sentence_enders = {'.', '!', '?'}
+
+        # Calculate buffer for sentence completion (20% beyond recommended)
+        sentence_buffer = int(recommended_tokens * 0.2) if recommended_tokens else 0
 
         for token_idx in range(max_tokens):
             # Get distribution for current state
@@ -89,6 +98,10 @@ class MarkovModel:
                     distribution, len(generated_tokens), recommended_tokens
                 )
 
+            # Check if we've hit the recommended length
+            if recommended_tokens and len(generated_tokens) >= recommended_tokens:
+                hit_recommended = True
+
             # Apply temperature and top_k filtering
             next_token = self._sample_token(distribution, temperature, top_k)
 
@@ -97,12 +110,32 @@ class MarkovModel:
 
             generated_tokens.append(next_token)
 
+            # If we've hit recommended length and sentence completion is enabled
+            # Check if we just completed a sentence
+            if complete_sentences and hit_recommended and next_token in sentence_enders:
+                # Completed a sentence after hitting recommended length, stop here
+                break
+
+            # Hard stop if we exceed recommended + buffer
+            if complete_sentences and recommended_tokens:
+                if len(generated_tokens) >= recommended_tokens + sentence_buffer:
+                    # Truncate back to last sentence ender if possible
+                    for i in range(len(generated_tokens) - 1, -1, -1):
+                        if generated_tokens[i] in sentence_enders:
+                            generated_tokens = generated_tokens[:i + 1]
+                            break
+                    break
+
             # Update state: remove first token, add next_token
             state_tokens = current_state.split()
             state_tokens = state_tokens[1:] + [next_token]
             current_state = " ".join(state_tokens)
 
-        return " ".join(generated_tokens)
+        # Use tokenizer's detokenize method if available, otherwise fallback to simple join
+        if self.tokenizer and hasattr(self.tokenizer, 'detokenize'):
+            return self.tokenizer.detokenize(generated_tokens)
+        else:
+            return " ".join(generated_tokens)
 
     def get_distribution(self, state: str) -> Dict[str, float]:
         """

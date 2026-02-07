@@ -31,18 +31,21 @@ def main():
         logger.info("Initializing database...")
         db = Database(config['db_path'])
 
+        # Initialize tokenizer first (needed by model)
+        logger.info("Initializing tokenizer...")
+        tokenizer = Tokenizer()
+
         # Initialize Markov model
         logger.info("Initializing Markov model...")
-        model = MarkovModel(config['markov_order'])
+        model = MarkovModel(config['markov_order'], tokenizer=tokenizer)
 
         # Load existing transitions from database
         logger.info("Loading existing transitions...")
         transitions_loaded = model.load_from_database(db)
         logger.info(f"Loaded {transitions_loaded} transitions from database")
 
-        # Initialize tokenizer and text processor
+        # Initialize text processor
         logger.info("Initializing text processor...")
-        tokenizer = Tokenizer()
         text_processor = TextProcessor(config)
 
         # Initialize safety filter

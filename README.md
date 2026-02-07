@@ -119,6 +119,7 @@ Both endpoints:
   - `temperature` — override TEMPERATURE for this request
   - `num_predict` — override MAX_TOKENS for this request
   - `recommended_tokens` — override RECOMMENDED_TOKENS for this request
+  - `complete_sentences` — override COMPLETE_SENTENCES for this request (true/false)
   - `top_k` — restrict sampling to top K tokens
 
 ### OpenAI-Compatible Endpoints
@@ -219,6 +220,7 @@ MODE=training
 LOG_LEVEL=INFO
 RECOMMENDED_TOKENS=50
 MAX_TOKENS=500
+COMPLETE_SENTENCES=true
 TEMPERATURE=0.8
 SSL_ENABLED=false
 SSL_CERT=
@@ -236,6 +238,11 @@ SSL_KEY=
   - Examples: 25-35 for 1-2 sentences, 50-75 for 2-3 sentences, 100-150 for a paragraph
 - `MAX_TOKENS` — hard maximum output length (default: 500)
   - Generation will always stop at this limit regardless of other settings
+- `COMPLETE_SENTENCES` — finish sentences before stopping (default: true)
+  - When true, continues generating past `RECOMMENDED_TOKENS` until reaching sentence-ending punctuation (. ! ?)
+  - Adds up to 20% buffer beyond recommended length to complete sentences
+  - Prevents mid-sentence cutoffs for more natural output
+  - Set to false for strict token-count adherence
 
 **Other generation options:**
 - `TEMPERATURE` — sampling randomness (default: 0.8)

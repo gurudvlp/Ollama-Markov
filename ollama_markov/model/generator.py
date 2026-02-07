@@ -44,6 +44,7 @@ class Generator:
         temperature = options.get('temperature', self.config['temperature']) if options else self.config['temperature']
         max_tokens = options.get('num_predict', self.config['max_tokens']) if options else self.config['max_tokens']
         recommended_tokens = options.get('recommended_tokens', self.config['recommended_tokens']) if options else self.config['recommended_tokens']
+        complete_sentences = options.get('complete_sentences', self.config['complete_sentences']) if options else self.config['complete_sentences']
         top_k = options.get('top_k', None) if options else None
 
         # Preprocess and train
@@ -71,7 +72,7 @@ class Generator:
 
         # Generate response
         seed_state = self._select_seed_state(prompt)
-        generated = self.model.generate(seed_state, max_tokens, temperature, top_k, recommended_tokens)
+        generated = self.model.generate(seed_state, max_tokens, temperature, top_k, recommended_tokens, complete_sentences)
 
         if not generated:
             return "I don't have enough training data yet."
@@ -131,10 +132,11 @@ class Generator:
         temperature = options.get('temperature', self.config['temperature']) if options else self.config['temperature']
         max_tokens = options.get('num_predict', self.config['max_tokens']) if options else self.config['max_tokens']
         recommended_tokens = options.get('recommended_tokens', self.config['recommended_tokens']) if options else self.config['recommended_tokens']
+        complete_sentences = options.get('complete_sentences', self.config['complete_sentences']) if options else self.config['complete_sentences']
         top_k = options.get('top_k', None) if options else None
 
         seed_state = self._select_seed_state(context)
-        generated = self.model.generate(seed_state, max_tokens, temperature, top_k, recommended_tokens)
+        generated = self.model.generate(seed_state, max_tokens, temperature, top_k, recommended_tokens, complete_sentences)
 
         if not generated:
             return "I don't have enough training data yet."
