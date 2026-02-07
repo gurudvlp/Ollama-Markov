@@ -272,8 +272,15 @@ This database is **not part of the core project** and is only used for deduplica
    - Weighted random choice from state distribution
    - Optional top-k restriction
    - Optional distribution flattening/sharpening
+   - **Length biasing**: When `recommended_tokens` is set, the probability of selecting `<END>` is gradually increased as generation approaches and exceeds the recommended length
+     - Uses sigmoid curve: `1 / (1 + e^(-0.2 * (current_length - 0.8 * recommended_length)))`
+     - Starts boosting at ~80% of recommended length
+     - Boost factor at recommended length: ~6x
+     - Boost increases exponentially beyond recommended length
+     - Still respects `max_tokens` as hard upper limit
+     - Only applied if `<END>` token is available in current state's distribution
 4. **Stopping Conditions**
-   - `<END>` token
+   - `<END>` token (biased by length recommendations)
    - max tokens / characters
    - repetition detection
    - timeout
@@ -353,11 +360,12 @@ Both endpoints **train the model** on user messages. Behavior differs by mode:
 - **Use case**: Chat-style interaction with history (most common for Discord bots, etc.)
 
 ### Options
-Both endpoints accept Ollama-standard options:
-- `temperature`: Sampling temperature (higher = more random)
+Both endpoints accept Ollama-standard options (via an `options` object in the request):
+- `temperature`: Sampling temperature (higher = more random) — overrides TEMPERATURE
 - `top_k`: Restrict to top K most likely tokens
-- `num_predict`: Max tokens to generate
-- `stop`: Stop sequences
+- `num_predict`: Max tokens to generate — overrides MAX_TOKENS
+- `recommended_tokens`: Target output length in tokens — overrides RECOMMENDED_TOKENS
+- `stop`: Stop sequences (future enhancement)
 
 ### Streaming
 - Both endpoints support `stream: true` for token-by-token responses
@@ -440,6 +448,9 @@ For compatibility with web interfaces and OpenAI-compatible clients, the server 
   - `OLLAMA_PORT`: HTTP server port (default 11434)
   - `MARKOV_ORDER`: n-gram order (default 2–3)
   - `COMPACTION_INTERVAL`: how often to merge transitions (time-based or write-based)
+  - `RECOMMENDED_TOKENS`: Target output length in tokens (default 50, ~2-3 sentences)
+  - `MAX_TOKENS`: Maximum output length in tokens (default 500, hard limit)
+  - `TEMPERATURE`: Sampling temperature (default 0.8, 0=deterministic, >1=random)
   - `SSL_ENABLED`: Enable HTTPS (default false)
   - `SSL_CERT`: Path to SSL certificate file
   - `SSL_KEY`: Path to SSL private key file
@@ -522,3 +533,45 @@ The server supports HTTPS for secure client connections:
 - **Simple**: Markov chains are straightforward. No complex neural operations. Easy to understand and debug.
 - **Lightweight**: Minimal CPU/memory. Can run on modest hardware.
 - **Flexible**: General-purpose text generator. Works with any corpus, any domain.
+
+---
+
+## Implementation Status
+
+### Current Features (Implemented)
+
+**Core Functionality:**
+- ✅ Word-level Markov model with configurable order (2-3 default)
+- ✅ Ollama-compatible API endpoints (`/api/generate`, `/api/chat`, `/api/tags`)
+- ✅ OpenAI-compatible endpoints (`/v1/models`, `/v1/chat/completions`)
+- ✅ Dual-mode operation (Training and Live)
+- ✅ Incremental training via HTTP API
+- ✅ SQLite storage with raw corpus and transitions
+- ✅ Text preprocessing and PII scrubbing
+- ✅ Safety filters (blocklists, harassment detection)
+- ✅ SSL/HTTPS support
+- ✅ Streaming responses (word-by-word)
+
+**Generation Control:**
+- ✅ Temperature-based sampling
+- ✅ Top-K token restriction
+- ✅ **Output length control** (recommended and maximum tokens)
+  - Configurable via `.env`: `RECOMMENDED_TOKENS` and `MAX_TOKENS`
+  - Per-request override via `options` object
+  - Sigmoid-based length biasing encourages natural stopping near target length
+- ✅ Per-request option overrides
+
+**Tools & Utilities:**
+- ✅ Optional Reddit scraper (separate `reddit_tools/` directory)
+- ✅ Batch import scripts for JSON/CSV/text files
+- ✅ Interactive test script
+- ✅ SSL certificate generation script
+
+### Latest Updates (2026-02-07)
+
+**Added output length control:**
+- New `RECOMMENDED_TOKENS` config setting (default: 50 tokens ≈ 2-3 sentences)
+- Enhanced generation pipeline with sigmoid-based length biasing
+- Automatic probability boost for `<END>` token as output approaches recommended length
+- Per-request `recommended_tokens` option for dynamic control
+- Updated documentation in README and design spec

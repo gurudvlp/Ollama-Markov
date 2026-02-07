@@ -115,6 +115,11 @@ Both endpoints:
 - **Train** on user messages (when allowed)
 - **Generate** response (in Live mode) or return status (in Training mode)
 - **Return** Ollama-compatible response format
+- **Support per-request options**: You can override defaults by including an `options` object in your request:
+  - `temperature` — override TEMPERATURE for this request
+  - `num_predict` — override MAX_TOKENS for this request
+  - `recommended_tokens` — override RECOMMENDED_TOKENS for this request
+  - `top_k` — restrict sampling to top K tokens
 
 ### OpenAI-Compatible Endpoints
 
@@ -212,6 +217,9 @@ Create a `.env` file:
 OLLAMA_PORT=11434
 MODE=training
 LOG_LEVEL=INFO
+RECOMMENDED_TOKENS=50
+MAX_TOKENS=500
+TEMPERATURE=0.8
 SSL_ENABLED=false
 SSL_CERT=
 SSL_KEY=
@@ -220,6 +228,20 @@ SSL_KEY=
 **MODE options:**
 - `training` — accept messages, update model, return status (no responses)
 - `live` — accept messages, update model, generate and return responses
+
+**Output length control:**
+- `RECOMMENDED_TOKENS` — target output length in tokens (default: 50, approximately 2-3 sentences)
+  - The generator gradually increases the probability of stopping as it approaches this length
+  - Adjust higher for longer responses or lower for shorter ones
+  - Examples: 25-35 for 1-2 sentences, 50-75 for 2-3 sentences, 100-150 for a paragraph
+- `MAX_TOKENS` — hard maximum output length (default: 500)
+  - Generation will always stop at this limit regardless of other settings
+
+**Other generation options:**
+- `TEMPERATURE` — sampling randomness (default: 0.8)
+  - 0 = deterministic (always picks most likely token)
+  - 1.0 = normal randomness
+  - \>1.0 = more random/creative
 
 **SSL/HTTPS options:**
 - `SSL_ENABLED` — set to `true` to enable HTTPS (default: `false`)

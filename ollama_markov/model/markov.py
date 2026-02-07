@@ -54,6 +54,7 @@ class MarkovModel:
         max_tokens: int,
         temperature: float = 1.0,
         top_k: Optional[int] = None,
+        recommended_tokens: Optional[int] = None,
     ) -> str:
         """
         Generate text starting from seed_state.
@@ -63,6 +64,7 @@ class MarkovModel:
             max_tokens: Maximum number of tokens to generate
             temperature: Sampling temperature (0=deterministic, 1=default, >1=random)
             top_k: Restrict sampling to top K tokens (None=all)
+            recommended_tokens: Target token count - increases END probability as this is approached
 
         Returns:
             Generated text as string
@@ -73,13 +75,19 @@ class MarkovModel:
         generated_tokens = []
         current_state = seed_state
 
-        for _ in range(max_tokens):
+        for token_idx in range(max_tokens):
             # Get distribution for current state
             distribution = self.get_distribution(current_state)
 
             if not distribution:
                 # No transitions from this state, stop generation
                 break
+
+            # Apply recommended length bias if specified
+            if recommended_tokens is not None and "<END>" in distribution:
+                distribution = self._apply_length_bias(
+                    distribution, len(generated_tokens), recommended_tokens
+                )
 
             # Apply temperature and top_k filtering
             next_token = self._sample_token(distribution, temperature, top_k)
@@ -116,6 +124,56 @@ class MarkovModel:
             return {}
 
         return {token: count / total for token, count in counts.items()}
+
+    def _apply_length_bias(
+        self, distribution: Dict[str, float], current_length: int, recommended_length: int
+    ) -> Dict[str, float]:
+        """
+        Bias the distribution toward <END> as we approach and exceed recommended length.
+
+        Uses a sigmoid-like curve that starts boosting <END> at 80% of recommended length,
+        and strongly favors it beyond the recommended length.
+
+        Args:
+            distribution: Token probability distribution
+            current_length: Number of tokens generated so far
+            recommended_length: Target length in tokens
+
+        Returns:
+            Modified distribution with <END> bias applied
+        """
+        if "<END>" not in distribution or recommended_length <= 0:
+            return distribution
+
+        # Calculate how far we are relative to the recommended length
+        # Negative = before target, 0 = at target, positive = beyond target
+        distance_from_target = current_length - recommended_length
+
+        # Calculate END boost factor using a sigmoid curve
+        # Starts at 0.8 * recommended_length, increases sharply at recommended_length
+        # Formula: 1 / (1 + e^(-steepness * (current - 0.8 * recommended)))
+        steepness = 0.2  # Controls how quickly END probability increases
+        offset = 0.8 * recommended_length
+
+        # Sigmoid value ranges from 0 to 1
+        sigmoid_value = 1.0 / (1.0 + math.exp(-steepness * (current_length - offset)))
+
+        # Boost factor: multiply END probability by (1 + boost)
+        # At 0.8 * recommended: boost ≈ 1 (END prob doubled)
+        # At recommended: boost ≈ 5 (END prob 6x)
+        # Beyond recommended: boost increases exponentially
+        boost_factor = 1.0 + (sigmoid_value * 10.0)  # Scale sigmoid to meaningful boost
+
+        # Create new distribution with boosted END
+        new_distribution = dict(distribution)
+        new_distribution["<END>"] *= boost_factor
+
+        # Renormalize to maintain probability distribution
+        total = sum(new_distribution.values())
+        if total > 0:
+            new_distribution = {token: prob / total for token, prob in new_distribution.items()}
+
+        return new_distribution
 
     def _sample_token(
         self, distribution: Dict[str, float], temperature: float = 1.0,

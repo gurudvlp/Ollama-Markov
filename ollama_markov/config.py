@@ -24,6 +24,7 @@ def load_config() -> Dict[str, Any]:
         "ollama_port": int(os.getenv("OLLAMA_PORT", "11434")),
         "markov_order": int(os.getenv("MARKOV_ORDER", "2")),
         "compaction_interval": int(os.getenv("COMPACTION_INTERVAL", "1000")),
+        "recommended_tokens": int(os.getenv("RECOMMENDED_TOKENS", "50")),
         "max_tokens": int(os.getenv("MAX_TOKENS", "500")),
         "temperature": float(os.getenv("TEMPERATURE", "0.8")),
         "min_message_length": int(os.getenv("MIN_MESSAGE_LENGTH", "3")),

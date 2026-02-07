@@ -43,6 +43,7 @@ class Generator:
         # Extract options
         temperature = options.get('temperature', self.config['temperature']) if options else self.config['temperature']
         max_tokens = options.get('num_predict', self.config['max_tokens']) if options else self.config['max_tokens']
+        recommended_tokens = options.get('recommended_tokens', self.config['recommended_tokens']) if options else self.config['recommended_tokens']
         top_k = options.get('top_k', None) if options else None
 
         # Preprocess and train
@@ -70,7 +71,7 @@ class Generator:
 
         # Generate response
         seed_state = self._select_seed_state(prompt)
-        generated = self.model.generate(seed_state, max_tokens, temperature, top_k)
+        generated = self.model.generate(seed_state, max_tokens, temperature, top_k, recommended_tokens)
 
         if not generated:
             return "I don't have enough training data yet."
@@ -129,10 +130,11 @@ class Generator:
         # Extract options and generate
         temperature = options.get('temperature', self.config['temperature']) if options else self.config['temperature']
         max_tokens = options.get('num_predict', self.config['max_tokens']) if options else self.config['max_tokens']
+        recommended_tokens = options.get('recommended_tokens', self.config['recommended_tokens']) if options else self.config['recommended_tokens']
         top_k = options.get('top_k', None) if options else None
 
         seed_state = self._select_seed_state(context)
-        generated = self.model.generate(seed_state, max_tokens, temperature, top_k)
+        generated = self.model.generate(seed_state, max_tokens, temperature, top_k, recommended_tokens)
 
         if not generated:
             return "I don't have enough training data yet."
