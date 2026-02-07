@@ -85,6 +85,9 @@ SQLite Storage (corpus + transitions)
 Ollama-compatible HTTP endpoints:
 
 ```bash
+# List available models
+curl http://localhost:11434/api/tags
+
 # Generate from a prompt
 curl -X POST http://localhost:11434/api/generate \
   -H "Content-Type: application/json" \
@@ -105,11 +108,40 @@ curl -X POST http://localhost:11434/api/chat \
   }'
 ```
 
+For HTTPS (if SSL_ENABLED=true), use `https://` instead of `http://`
+
 Both endpoints:
 - **Accept** the Ollama request format
 - **Train** on user messages (when allowed)
 - **Generate** response (in Live mode) or return status (in Training mode)
 - **Return** Ollama-compatible response format
+
+### OpenAI-Compatible Endpoints
+
+For web interfaces and OpenAI-compatible clients:
+
+```bash
+# List available models
+curl http://localhost:11434/v1/models
+
+# Chat completion (OpenAI format)
+curl -X POST http://localhost:11434/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ollama-markov",
+    "messages": [
+      {"role": "user", "content": "Hello there"}
+    ],
+    "temperature": 0.8,
+    "max_tokens": 500
+  }'
+```
+
+These endpoints:
+- **Accept** OpenAI-format requests
+- **Train** on user messages (same as Ollama endpoints)
+- **Generate** responses in Live mode
+- **Return** OpenAI-compatible response format
 
 ## Getting Started
 
@@ -180,11 +212,38 @@ Create a `.env` file:
 OLLAMA_PORT=11434
 MODE=training
 LOG_LEVEL=INFO
+SSL_ENABLED=false
+SSL_CERT=
+SSL_KEY=
 ```
 
 **MODE options:**
 - `training` — accept messages, update model, return status (no responses)
 - `live` — accept messages, update model, generate and return responses
+
+**SSL/HTTPS options:**
+- `SSL_ENABLED` — set to `true` to enable HTTPS (default: `false`)
+- `SSL_CERT` — path to SSL certificate file (required if SSL_ENABLED=true)
+- `SSL_KEY` — path to SSL private key file (required if SSL_ENABLED=true)
+
+#### Enabling HTTPS
+
+For development/testing with self-signed certificates:
+
+```bash
+# Install SSL support
+pip install pyOpenSSL
+
+# Generate self-signed certificate
+python scripts/generate_ssl_cert.py
+
+# Enable HTTPS in .env
+SSL_ENABLED=true
+SSL_CERT=/path/to/cert.pem
+SSL_KEY=/path/to/key.pem
+```
+
+For production, use proper CA-signed certificates (Let's Encrypt, etc.).
 
 ### Running the Server
 

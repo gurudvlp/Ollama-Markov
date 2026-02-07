@@ -58,8 +58,20 @@ def main():
         server = OllamaServer(generator, config)
 
         # Start server
-        logger.info(f"Starting HTTP server on port {config['ollama_port']}...")
-        server.start(host="0.0.0.0", port=config['ollama_port'])
+        if config.get('ssl_enabled', False):
+            ssl_cert = config.get('ssl_cert')
+            ssl_key = config.get('ssl_key')
+            if ssl_cert and ssl_key:
+                logger.info(f"Starting HTTPS server on port {config['ollama_port']}...")
+                logger.info(f"SSL Certificate: {ssl_cert}")
+                logger.info(f"SSL Key: {ssl_key}")
+                server.start(host="0.0.0.0", port=config['ollama_port'], ssl_cert=ssl_cert, ssl_key=ssl_key)
+            else:
+                logger.info(f"Starting HTTPS server with self-signed certificate on port {config['ollama_port']}...")
+                server.start(host="0.0.0.0", port=config['ollama_port'], ssl_cert='adhoc', ssl_key='adhoc')
+        else:
+            logger.info(f"Starting HTTP server on port {config['ollama_port']}...")
+            server.start(host="0.0.0.0", port=config['ollama_port'])
 
     except KeyboardInterrupt:
         logger.info("Server stopped by user")

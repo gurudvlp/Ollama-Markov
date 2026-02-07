@@ -75,6 +75,9 @@ class TextProcessor:
         Returns:
             Normalized text
         """
+        if not isinstance(text, str):
+            raise TypeError(f"Expected string, got {type(text).__name__}")
+
         if not text:
             return text
 
@@ -104,6 +107,9 @@ class TextProcessor:
         Returns:
             List of tokens
         """
+        if not isinstance(text, str):
+            raise TypeError(f"Expected string, got {type(text).__name__}")
+
         if not text:
             return []
 
@@ -120,6 +126,10 @@ class TextProcessor:
         Returns:
             List of tokens or None if should not train
         """
+        # Ensure input is a string
+        if not isinstance(text, str):
+            raise TypeError(f"Expected string, got {type(text).__name__}")
+
         if not self.should_train(text):
             return None
 

@@ -6,6 +6,7 @@ Loads settings from environment variables or .env file.
 
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
 
 
 def load_config() -> Dict[str, Any]:
@@ -15,6 +16,9 @@ def load_config() -> Dict[str, Any]:
     Returns:
         Dictionary with configuration settings.
     """
+    # Load .env file if it exists
+    load_dotenv()
+
     config = {
         "mode": os.getenv("MODE", "training"),  # "training" or "live"
         "ollama_port": int(os.getenv("OLLAMA_PORT", "11434")),
@@ -25,5 +29,8 @@ def load_config() -> Dict[str, Any]:
         "min_message_length": int(os.getenv("MIN_MESSAGE_LENGTH", "3")),
         "log_level": os.getenv("LOG_LEVEL", "INFO"),
         "db_path": os.getenv("DB_PATH", "ollama_markov.db"),
+        "ssl_enabled": os.getenv("SSL_ENABLED", "false").lower() == "true",
+        "ssl_cert": os.getenv("SSL_CERT", None),
+        "ssl_key": os.getenv("SSL_KEY", None),
     }
     return config

@@ -313,6 +313,33 @@ This database is **not part of the core project** and is only used for deduplica
 
 Both endpoints **train the model** on user messages. Behavior differs by mode:
 
+#### `GET /api/tags`
+- **Input**: None
+- **Output**: List of available models in Ollama format
+- **Use case**: Model discovery for Ollama clients
+- **Response format**:
+  ```json
+  {
+    "models": [
+      {
+        "name": "ollama-markov:latest",
+        "model": "ollama-markov:latest",
+        "modified_at": "2026-02-07T12:00:00Z",
+        "size": 0,
+        "digest": "markov-model",
+        "details": {
+          "parent_model": "",
+          "format": "markov",
+          "family": "markov",
+          "families": ["markov"],
+          "parameter_size": "0",
+          "quantization_level": "N/A"
+        }
+      }
+    ]
+  }
+  ```
+
 #### `POST /api/generate`
 - **Input**: `{ model, prompt, stream, options }`
 - **Training Mode**: Adds prompt to corpus, returns `{ response: "Trained", done: true }`
@@ -336,17 +363,104 @@ Both endpoints accept Ollama-standard options:
 - Both endpoints support `stream: true` for token-by-token responses
 - Uses chunked transfer encoding with newline-delimited JSON
 
+### OpenAI-Compatible Endpoints
+
+For compatibility with web interfaces and OpenAI-compatible clients, the server also provides:
+
+#### `GET /v1/models`
+- Returns list of available models
+- No authentication required
+- Response format:
+  ```json
+  {
+    "object": "list",
+    "data": [
+      {
+        "id": "ollama-markov",
+        "object": "model",
+        "created": 1706745600,
+        "owned_by": "ollama-markov"
+      }
+    ]
+  }
+  ```
+
+#### `POST /v1/chat/completions`
+- OpenAI-compatible chat completion endpoint
+- Accepts OpenAI-format requests with `messages`, `temperature`, `max_tokens`
+- Maps parameters:
+  - `temperature` → sampling temperature
+  - `max_tokens` → maximum tokens to generate
+  - `top_k` → top-k sampling
+- Returns OpenAI-format responses with message and usage info
+- Includes `system_fingerprint: "fp_ollama"` for Ollama compatibility
+- **Trains the model** on user messages (same as Ollama endpoints)
+- Example request:
+  ```json
+  {
+    "model": "ollama-markov",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "temperature": 0.8,
+    "max_tokens": 500
+  }
+  ```
+- Example response:
+  ```json
+  {
+    "id": "chatcmpl-1234567890",
+    "object": "chat.completion",
+    "created": 1234567890,
+    "model": "ollama-markov",
+    "system_fingerprint": "fp_ollama",
+    "choices": [{
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Generated response text"
+      },
+      "finish_reason": "stop"
+    }],
+    "usage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0
+    }
+  }
+  ```
+
 ---
 
 ## Deployment & Operation
 
 ### Startup & Configuration
-- Loaded from `.env` or environment variables
+- Configuration loaded from `.env` file (using python-dotenv) or environment variables
+- `.env` file must be in the project root directory
 - Key settings:
   - `MODE`: `training` or `live`
   - `OLLAMA_PORT`: HTTP server port (default 11434)
   - `MARKOV_ORDER`: n-gram order (default 2–3)
   - `COMPACTION_INTERVAL`: how often to merge transitions (time-based or write-based)
+  - `SSL_ENABLED`: Enable HTTPS (default false)
+  - `SSL_CERT`: Path to SSL certificate file
+  - `SSL_KEY`: Path to SSL private key file
+
+### SSL/HTTPS Support
+
+The server supports HTTPS for secure client connections:
+
+**Configuration:**
+- Set `SSL_ENABLED=true` in `.env` or environment variables
+- Provide paths to SSL certificate and key files
+- For development, use the provided script to generate self-signed certificates:
+  ```bash
+  python scripts/generate_ssl_cert.py
+  ```
+
+**Notes:**
+- Self-signed certificates will trigger security warnings in browsers/clients
+- For production deployments, use CA-signed certificates (Let's Encrypt, etc.)
+- Some Ollama clients may require HTTPS for network connections
+- The Flask development server is used; for production, consider a proper WSGI server with reverse proxy
 
 ### Training Phase
 1. Optional: Bootstrap with `scripts/import_training_data.py` (files → corpus)
