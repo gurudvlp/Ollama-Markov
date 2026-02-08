@@ -47,8 +47,15 @@ class BackgroundWorker:
 
         # Initialize components
         self.db = Database(db_path)
+
+        # Create minimal config for TextProcessor
+        config = {
+            "min_message_length": 3
+        }
+        self.text_processor = TextProcessor(config)
+
+        # Initialize tokenizer for MarkovModel
         self.tokenizer = Tokenizer()
-        self.text_processor = TextProcessor(self.tokenizer)
 
         # Create a model for each order
         self.models = {

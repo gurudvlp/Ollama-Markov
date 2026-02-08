@@ -38,7 +38,12 @@ def rebuild_transitions(db_path: str, order: int, clear_existing: bool = False):
     # Initialize components
     db = Database(db_path)
     tokenizer = Tokenizer()
-    text_processor = TextProcessor(tokenizer)
+
+    # Create minimal config for TextProcessor
+    config = {
+        "min_message_length": 3
+    }
+    text_processor = TextProcessor(config)
     model = MarkovModel(order=order, tokenizer=tokenizer)
 
     # Get corpus statistics
