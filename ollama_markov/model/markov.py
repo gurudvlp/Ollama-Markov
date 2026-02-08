@@ -14,41 +14,71 @@ import math
 class MarkovModel:
     """Word-level Markov chain model for text generation."""
 
-    def __init__(self, order: int = 2, tokenizer=None):
+    def __init__(self, order: int = 2, tokenizer=None, multi_order: bool = False, orders: List[int] = None):
         """
         Initialize Markov model with n-gram order.
 
         Args:
-            order: N-gram order (typically 2-3)
+            order: Primary n-gram order (typically 2-3)
             tokenizer: Optional tokenizer instance for proper detokenization
+            multi_order: If True, support multiple orders with fallback
+            orders: List of orders to support (e.g., [2, 3, 4]). If None, uses [order]
         """
         self.order = order
         self.tokenizer = tokenizer
-        self.transitions = defaultdict(lambda: defaultdict(int))
+        self.multi_order = multi_order
 
-    def train(self, tokens: List[str]) -> None:
+        if multi_order and orders:
+            self.orders = sorted(orders)
+            self.max_order = max(orders)
+            # Store transitions per order: {order: {state: {token: count}}}
+            self.transitions = {o: defaultdict(lambda: defaultdict(int)) for o in orders}
+        else:
+            self.orders = [order]
+            self.max_order = order
+            # Single order mode (backward compatible)
+            self.transitions = defaultdict(lambda: defaultdict(int))
+            self._single_order_mode = True
+
+    def train(self, tokens: List[str], specific_order: Optional[int] = None) -> None:
         """
         Add a sequence of tokens to the model.
 
-        Updates transition counts for all n-grams of the specified order.
+        Updates transition counts for all n-grams of the specified order(s).
 
         Args:
             tokens: List of string tokens
+            specific_order: If provided, only train this specific order (for background processing)
         """
         if not tokens:
             return
 
-        # Prepend START tokens and append END token
-        full_sequence = ["<START>"] * (self.order - 1) + tokens + ["<END>"]
+        # Determine which orders to train
+        if specific_order:
+            orders_to_train = [specific_order]
+        elif self.multi_order:
+            orders_to_train = self.orders
+        else:
+            orders_to_train = [self.order]
 
-        # Create n-grams and update transitions
-        for i in range(len(full_sequence) - self.order):
-            # State is the current n-1 tokens
-            state = " ".join(full_sequence[i : i + self.order - 1])
-            # Next token is the token after the state
-            next_token = full_sequence[i + self.order - 1]
+        # Prepend enough START tokens for the highest order
+        max_order = max(orders_to_train)
+        full_sequence = ["<START>"] * (max_order - 1) + tokens + ["<END>"]
 
-            self.transitions[state][next_token] += 1
+        # Train each order
+        for order in orders_to_train:
+            # Create n-grams and update transitions for this order
+            for i in range(len(full_sequence) - order + 1):
+                # State is the current n-1 tokens
+                state = " ".join(full_sequence[i : i + order - 1])
+                # Next token is the token after the state
+                next_token = full_sequence[i + order - 1]
+
+                if self.multi_order:
+                    self.transitions[order][state][next_token] += 1
+                else:
+                    # Backward compatible single-order mode
+                    self.transitions[state][next_token] += 1
 
     def generate(
         self,
@@ -62,6 +92,8 @@ class MarkovModel:
         """
         Generate text starting from seed_state.
 
+        In multi-order mode, tries highest order first and falls back to lower orders.
+
         Args:
             seed_state: Initial state for generation
             max_tokens: Maximum number of tokens to generate
@@ -74,7 +106,10 @@ class MarkovModel:
             Generated text as string
         """
         if not seed_state:
-            seed_state = " ".join(["<START>"] * (self.order - 1))
+            if self.multi_order:
+                seed_state = " ".join(["<START>"] * (self.max_order - 1))
+            else:
+                seed_state = " ".join(["<START>"] * (self.order - 1))
 
         generated_tokens = []
         current_state = seed_state
@@ -85,7 +120,7 @@ class MarkovModel:
         sentence_buffer = int(recommended_tokens * 0.2) if recommended_tokens else 0
 
         for token_idx in range(max_tokens):
-            # Get distribution for current state
+            # Get distribution for current state (with fallback in multi-order mode)
             distribution = self.get_distribution(current_state)
 
             if not distribution:
@@ -128,7 +163,16 @@ class MarkovModel:
 
             # Update state: remove first token, add next_token
             state_tokens = current_state.split()
-            state_tokens = state_tokens[1:] + [next_token]
+
+            # In multi-order mode, maintain max_order state size
+            if self.multi_order:
+                state_tokens = state_tokens[-(self.max_order - 2):] + [next_token]
+                # Ensure we have max_order - 1 tokens
+                while len(state_tokens) < self.max_order - 1:
+                    state_tokens.insert(0, '<START>')
+            else:
+                state_tokens = state_tokens[1:] + [next_token]
+
             current_state = " ".join(state_tokens)
 
         # Use tokenizer's detokenize method if available, otherwise fallback to simple join
@@ -141,22 +185,51 @@ class MarkovModel:
         """
         Get next-token probability distribution for a state.
 
+        In multi-order mode, tries highest order first and falls back to lower orders.
+        For example, with orders [2, 3, 4]:
+          - Try order-4 state
+          - If not found, truncate state and try order-3
+          - If not found, truncate state and try order-2
+
         Args:
             state: Current state (space-separated tokens)
 
         Returns:
             Dictionary mapping tokens to probabilities
         """
-        if state not in self.transitions:
+        if self.multi_order:
+            # Try orders from highest to lowest
+            state_tokens = state.split()
+
+            for order in reversed(self.orders):
+                # Get the appropriate state size for this order
+                state_size = order - 1
+
+                if len(state_tokens) >= state_size:
+                    # Take the last state_size tokens
+                    order_state = " ".join(state_tokens[-state_size:])
+
+                    if order_state in self.transitions[order]:
+                        counts = self.transitions[order][order_state]
+                        total = sum(counts.values())
+
+                        if total > 0:
+                            return {token: count / total for token, count in counts.items()}
+
+            # No distribution found for any order
             return {}
+        else:
+            # Single-order mode (backward compatible)
+            if state not in self.transitions:
+                return {}
 
-        counts = self.transitions[state]
-        total = sum(counts.values())
+            counts = self.transitions[state]
+            total = sum(counts.values())
 
-        if total == 0:
-            return {}
+            if total == 0:
+                return {}
 
-        return {token: count / total for token, count in counts.items()}
+            return {token: count / total for token, count in counts.items()}
 
     def _apply_length_bias(
         self, distribution: Dict[str, float], current_length: int, recommended_length: int
@@ -266,7 +339,8 @@ class MarkovModel:
         """
         Load transitions from database into model.
 
-        Useful for continuing training from a previously trained model.
+        In multi-order mode, loads all configured orders.
+        In single-order mode, loads only the primary order.
 
         Args:
             db: Database instance
@@ -278,9 +352,16 @@ class MarkovModel:
         transitions_data = db.get_all_transitions()
 
         for order_n, state, next_token, count in transitions_data:
-            if order_n == self.order:
-                self.transitions[state][next_token] = count
-                transitions_loaded += 1
+            if self.multi_order:
+                # Load all configured orders
+                if order_n in self.orders:
+                    self.transitions[order_n][state][next_token] = count
+                    transitions_loaded += 1
+            else:
+                # Single-order mode (backward compatible)
+                if order_n == self.order:
+                    self.transitions[state][next_token] = count
+                    transitions_loaded += 1
 
         return transitions_loaded
 

@@ -23,7 +23,14 @@ def main():
 
     logger.info(f"Starting Ollama-Markov server in {config['mode']} mode")
     logger.info(f"Database: {config['db_path']}")
-    logger.info(f"Markov order: {config['markov_order']}")
+
+    if config['multi_order']:
+        logger.info(f"Multi-order mode enabled: {config['markov_orders']}")
+        logger.info(f"  Immediate training: order-{min(config['markov_orders'])}")
+        logger.info(f"  Background processing: orders {[o for o in config['markov_orders'] if o > min(config['markov_orders'])]}")
+    else:
+        logger.info(f"Single-order mode: {config['markov_order']}")
+
     logger.info(f"Server port: {config['ollama_port']}")
 
     try:
@@ -37,7 +44,17 @@ def main():
 
         # Initialize Markov model
         logger.info("Initializing Markov model...")
-        model = MarkovModel(config['markov_order'], tokenizer=tokenizer)
+        if config['multi_order']:
+            # Multi-order mode with fallback
+            model = MarkovModel(
+                order=min(config['markov_orders']),  # Primary order
+                tokenizer=tokenizer,
+                multi_order=True,
+                orders=config['markov_orders']
+            )
+        else:
+            # Single-order mode (backward compatible)
+            model = MarkovModel(config['markov_order'], tokenizer=tokenizer)
 
         # Load existing transitions from database
         logger.info("Loading existing transitions...")

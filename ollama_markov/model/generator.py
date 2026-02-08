@@ -51,20 +51,44 @@ class Generator:
         tokens = self.text_processor.preprocess(prompt)
 
         if tokens:
-            # Store message
-            self.db.add_message("api", "generate", prompt)
+            # Determine which orders need background processing
+            pending_orders = []
+            if hasattr(self.model, 'multi_order') and self.model.multi_order:
+                # In multi-order mode, only train the lowest order immediately
+                # Higher orders will be processed by background worker
+                immediate_order = min(self.model.orders)
+                pending_orders = [o for o in self.model.orders if o > immediate_order]
+            else:
+                # Single-order mode: no background processing needed
+                immediate_order = self.model.order
 
-            # Train model
-            self.model.train(tokens)
+            # Store message with pending orders marked
+            self.db.add_message("api", "generate", prompt, pending_orders=pending_orders)
 
-            # Store transitions in batch
-            transitions = []
-            for state, next_tokens in self.model.transitions.items():
-                for next_token, count in next_tokens.items():
-                    transitions.append((self.model.order, state, next_token, count))
+            # Train model on immediate order only
+            if hasattr(self.model, 'multi_order') and self.model.multi_order:
+                self.model.train(tokens, specific_order=immediate_order)
 
-            if transitions:
-                self.db.add_transitions_batch(transitions)
+                # Store transitions for immediate order
+                transitions = []
+                for state, next_tokens in self.model.transitions[immediate_order].items():
+                    for next_token, count in next_tokens.items():
+                        transitions.append((immediate_order, state, next_token, count))
+
+                if transitions:
+                    self.db.add_transitions_batch(transitions)
+            else:
+                # Single-order mode (backward compatible)
+                self.model.train(tokens)
+
+                # Store transitions in batch
+                transitions = []
+                for state, next_tokens in self.model.transitions.items():
+                    for next_token, count in next_tokens.items():
+                        transitions.append((self.model.order, state, next_token, count))
+
+                if transitions:
+                    self.db.add_transitions_batch(transitions)
 
         # Check if should generate
         if not self._should_generate(self.config['mode']):
@@ -109,17 +133,41 @@ class Generator:
             tokens = self.text_processor.preprocess(msg_content)
 
             if tokens:
-                self.db.add_message("api", "chat", msg_content)
-                self.model.train(tokens)
+                # Determine which orders need background processing
+                pending_orders = []
+                if hasattr(self.model, 'multi_order') and self.model.multi_order:
+                    immediate_order = min(self.model.orders)
+                    pending_orders = [o for o in self.model.orders if o > immediate_order]
+                else:
+                    immediate_order = self.model.order
 
-                # Store transitions
-                transitions = []
-                for state, next_tokens in self.model.transitions.items():
-                    for next_token, count in next_tokens.items():
-                        transitions.append((self.model.order, state, next_token, count))
+                # Store message with pending orders marked
+                self.db.add_message("api", "chat", msg_content, pending_orders=pending_orders)
 
-                if transitions:
-                    self.db.add_transitions_batch(transitions)
+                # Train model on immediate order only
+                if hasattr(self.model, 'multi_order') and self.model.multi_order:
+                    self.model.train(tokens, specific_order=immediate_order)
+
+                    # Store transitions for immediate order
+                    transitions = []
+                    for state, next_tokens in self.model.transitions[immediate_order].items():
+                        for next_token, count in next_tokens.items():
+                            transitions.append((immediate_order, state, next_token, count))
+
+                    if transitions:
+                        self.db.add_transitions_batch(transitions)
+                else:
+                    # Single-order mode (backward compatible)
+                    self.model.train(tokens)
+
+                    # Store transitions
+                    transitions = []
+                    for state, next_tokens in self.model.transitions.items():
+                        for next_token, count in next_tokens.items():
+                            transitions.append((self.model.order, state, next_token, count))
+
+                    if transitions:
+                        self.db.add_transitions_batch(transitions)
 
         # Check if should generate
         if not self._should_generate(self.config['mode']):

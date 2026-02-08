@@ -88,6 +88,72 @@ Output voice and style are determined by:
 - **Transition probabilities**: reflect phrase patterns from training data
 - Optional output conditioning: prefix/suffix injection (configurable)
 
+### Multi-Order Mode (Advanced)
+
+**Purpose**: Support multiple n-gram orders simultaneously with intelligent fallback, providing both high-fidelity generation (higher orders) and robust coverage (lower orders).
+
+**Architecture**:
+- **Immediate Training**: Order-2 transitions are generated immediately during API requests (fast, ~1ms)
+- **Background Processing**: Order-3 and order-4 transitions are generated asynchronously by a background worker
+- **Intelligent Fallback**: Generation attempts highest order first, falls back to lower orders if no state found
+
+**Flow**:
+```
+API Request → Preprocess → Train Order-2 (immediate) → Store → Mark for background processing
+                                                                           ↓
+Background Worker (separate process) → Poll unprocessed messages → Generate Order-3/4 transitions → Mark complete
+```
+
+**Generation with Fallback**:
+```
+1. Try order-4 state from current context
+   ├─ Found? → Sample and continue
+   └─ Not found → Fall back to order-3
+
+2. Try order-3 state (truncate context)
+   ├─ Found? → Sample and continue
+   └─ Not found → Fall back to order-2
+
+3. Try order-2 state (truncate context)
+   ├─ Found? → Sample and continue
+   └─ Not found → Use <START> state
+```
+
+**Benefits**:
+- **Fast Response Time**: API responds immediately with order-2 training
+- **High Quality Generation**: Uses order-4 when available for rich context
+- **Robust Fallback**: Always has order-2 transitions available
+- **Efficient Resource Usage**: Background worker processes higher orders during idle time
+- **Progressive Enhancement**: Quality improves as background worker catches up
+
+**Configuration** (`.env`):
+```bash
+MULTI_ORDER=true              # Enable multi-order mode
+MARKOV_ORDERS=2,3,4          # Orders to support (2=immediate, 3-4=background)
+```
+
+**Background Worker** (`scripts/background_worker.py`):
+```bash
+# Run continuously
+python scripts/background_worker.py
+
+# Custom configuration
+python scripts/background_worker.py --orders 3,4 --interval 10 --batch-size 20
+
+# Run once and exit
+python scripts/background_worker.py --once
+```
+
+**Database Tracking**:
+- New `message_processing` table tracks which messages have been processed for which orders
+- Prevents duplicate processing and enables progress monitoring
+- Background worker queries unprocessed messages and updates status
+
+**Backward Compatibility**:
+- Single-order mode (`MULTI_ORDER=false`) remains default and fully supported
+- Existing databases work without migration
+- All new features are opt-in via configuration
+
 ---
 
 ## Training / Ingestion Pipeline
@@ -569,13 +635,37 @@ The server supports HTTPS for secure client connections:
   - Sigmoid-based length biasing encourages natural stopping near target length
 - ✅ Per-request option overrides
 
+**Advanced Features:**
+- ✅ **Multi-order mode with background processing**
+  - Simultaneous support for multiple n-gram orders (e.g., 2, 3, 4)
+  - Intelligent fallback from higher to lower orders during generation
+  - Immediate order-2 training (fast response time)
+  - Background worker for order-3 and order-4 processing
+  - Message processing tracking and progress monitoring
+  - Backward compatible with single-order mode
+
 **Tools & Utilities:**
 - ✅ Optional Reddit scraper (separate `reddit_tools/` directory)
 - ✅ Batch import scripts for JSON/CSV/text files
 - ✅ Interactive test script
 - ✅ SSL certificate generation script
+- ✅ Background worker for multi-order processing (`scripts/background_worker.py`)
+- ✅ Transition rebuild script for order migration (`scripts/rebuild_transitions.py`)
 
 ### Latest Updates (2026-02-07)
+
+**Added multi-order support with background processing:**
+- New `MULTI_ORDER` and `MARKOV_ORDERS` config settings for enabling multiple n-gram orders
+- Enhanced MarkovModel to support multiple orders with intelligent fallback logic
+- New `message_processing` database table for tracking background processing state
+- Background worker script (`scripts/background_worker.py`) for asynchronous order-3/4 processing
+- API server trains order-2 immediately, queues higher orders for background processing
+- Generation fallback: tries order-4 → order-3 → order-2 → <START>
+- Rebuild script (`scripts/rebuild_transitions.py`) for migrating existing corpus to new orders
+- Full backward compatibility with single-order mode
+- Documentation updated throughout
+
+**Previous update - Output length control:**
 
 **Added output length control:**
 - New `RECOMMENDED_TOKENS` config setting (default: 50 tokens ≈ 2-3 sentences)

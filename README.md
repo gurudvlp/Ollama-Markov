@@ -250,6 +250,35 @@ SSL_KEY=
   - 1.0 = normal randomness
   - \>1.0 = more random/creative
 
+**Multi-order mode (Advanced):**
+- `MULTI_ORDER` — enable multi-order processing with background worker (default: `false`)
+  - When enabled, supports multiple n-gram orders simultaneously
+  - Provides intelligent fallback from higher to lower orders during generation
+- `MARKOV_ORDERS` — comma-separated list of orders (default: `2,3,4`)
+  - Example: `2,3,4` trains order-2 immediately, processes order-3 and order-4 in background
+  - Lowest order is trained immediately (fast API response)
+  - Higher orders are processed by background worker (slower but thorough)
+  - Generation tries highest order first, falls back to lower orders if needed
+
+**How multi-order works:**
+1. API request arrives → trains order-2 immediately (~1ms) → responds
+2. Background worker polls for unprocessed messages
+3. Worker generates order-3 and order-4 transitions asynchronously
+4. Generation uses order-4 when available, falls back to order-3 or order-2
+5. Result: fast response time + high-quality generation
+
+**Running the background worker:**
+```bash
+# Start the background worker (run alongside the server)
+python scripts/background_worker.py
+
+# Custom options
+python scripts/background_worker.py --orders 3,4 --interval 10 --batch-size 20
+
+# Run once and exit (for testing)
+python scripts/background_worker.py --once
+```
+
 **SSL/HTTPS options:**
 - `SSL_ENABLED` — set to `true` to enable HTTPS (default: `false`)
 - `SSL_CERT` — path to SSL certificate file (required if SSL_ENABLED=true)

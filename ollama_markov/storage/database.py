@@ -66,10 +66,25 @@ class Database:
         """
         )
 
+        # Message processing tracking (for background workers)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS message_processing (
+                message_id INTEGER,
+                order_n INTEGER,
+                processed BOOLEAN DEFAULT 0,
+                processed_at DATETIME,
+                PRIMARY KEY (message_id, order_n),
+                FOREIGN KEY (message_id) REFERENCES messages(id)
+            )
+        """
+        )
+
         self.conn.commit()
 
     def add_message(
-        self, user_id: str, channel_id: str, content: str, timestamp: Optional[datetime] = None
+        self, user_id: str, channel_id: str, content: str, timestamp: Optional[datetime] = None,
+        pending_orders: Optional[List[int]] = None
     ) -> int:
         """
         Store raw message in corpus table.
@@ -79,6 +94,7 @@ class Database:
             channel_id: Channel identifier
             content: Message content
             timestamp: Message timestamp (defaults to current time)
+            pending_orders: List of orders that need background processing (e.g., [3, 4])
 
         Returns:
             Message ID
@@ -91,8 +107,21 @@ class Database:
             "INSERT INTO messages (timestamp, channel_id, user_id, content) VALUES (?, ?, ?, ?)",
             (timestamp, channel_id, user_id, content),
         )
+        message_id = cursor.lastrowid
+
+        # Mark message as needing processing for higher orders
+        if pending_orders:
+            for order_n in pending_orders:
+                cursor.execute(
+                    """
+                    INSERT INTO message_processing (message_id, order_n, processed)
+                    VALUES (?, ?, 0)
+                    """,
+                    (message_id, order_n)
+                )
+
         self.conn.commit()
-        return cursor.lastrowid
+        return message_id
 
     def add_transition(self, order_n: int, state: str, next_token: str, count: int = 1) -> None:
         """
@@ -366,8 +395,88 @@ class Database:
         cursor.execute("DELETE FROM messages")
         cursor.execute("DELETE FROM transitions")
         cursor.execute("DELETE FROM states")
+        cursor.execute("DELETE FROM message_processing")
 
         self.conn.commit()
+
+    def get_unprocessed_messages(self, order_n: int, limit: Optional[int] = None) -> List[Dict]:
+        """
+        Get messages that haven't been processed for a specific order.
+
+        Args:
+            order_n: N-gram order to check
+            limit: Maximum number of messages to retrieve
+
+        Returns:
+            List of message dictionaries with id, content, timestamp, etc.
+        """
+        cursor = self.conn.cursor()
+
+        query = """
+            SELECT m.id, m.timestamp, m.channel_id, m.user_id, m.content
+            FROM messages m
+            LEFT JOIN message_processing mp ON m.id = mp.message_id AND mp.order_n = ?
+            WHERE mp.processed IS NULL OR mp.processed = 0
+            ORDER BY m.id
+        """
+
+        if limit:
+            query += " LIMIT ?"
+            cursor.execute(query, (order_n, limit))
+        else:
+            cursor.execute(query, (order_n,))
+
+        return [dict(row) for row in cursor.fetchall()]
+
+    def mark_message_processed(self, message_id: int, order_n: int) -> None:
+        """
+        Mark a message as processed for a specific order.
+
+        Args:
+            message_id: Message ID
+            order_n: N-gram order
+        """
+        cursor = self.conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO message_processing (message_id, order_n, processed, processed_at)
+            VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+            """,
+            (message_id, order_n)
+        )
+
+        self.conn.commit()
+
+    def get_processing_stats(self) -> Dict:
+        """
+        Get statistics about message processing progress.
+
+        Returns:
+            Dictionary with processing stats per order
+        """
+        cursor = self.conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT order_n,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN processed = 1 THEN 1 ELSE 0 END) as processed,
+                   SUM(CASE WHEN processed = 0 THEN 1 ELSE 0 END) as pending
+            FROM message_processing
+            GROUP BY order_n
+            """
+        )
+
+        stats = {}
+        for row in cursor.fetchall():
+            stats[row['order_n']] = {
+                'total': row['total'],
+                'processed': row['processed'],
+                'pending': row['pending']
+            }
+
+        return stats
 
     def close(self) -> None:
         """Close database connection."""
