@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from ollama_markov.storage.database import Database
 from ollama_markov.model.markov import MarkovModel
-from ollama_markov.processing.tokenizer import Tokenizer
+from ollama_markov.model.tokenizer import Tokenizer
 from ollama_markov.processing.text_processor import TextProcessor
 
 
